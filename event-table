@@ -1,0 +1,23 @@
+This event table serves as an intermediate table between EGroupeware and AlphaAnywhere application. 
+
+Diese event Tabelle dient als Zwischentabelle zwischen EGroupeware und AlphaAnywhere Applikation. 
+
+CREATE TABLE `event` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `v_vg` int(8) DEFAULT 0,
+  `v_kom` int(5) DEFAULT 0,
+  `v_oo` int(5) DEFAULT 0,
+  `v_az_e` int(11) DEFAULT 0,
+  `cal_id` int(11) DEFAULT NULL,
+  `ETag` char(24) DEFAULT NULL,
+  `uuid` char(64) DEFAULT NULL,
+  `n_edit` varchar(32) DEFAULT NULL,
+  `caldav_name` varchar(64) DEFAULT NULL,
+  `executed` tinyint(1) DEFAULT 0,
+  `t_edit` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `t_create` timestamp NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `v_az_e` (`v_az_e`),
+  KEY `v_vg` (`v_vg`),
+  KEY `cal_id` (`cal_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=4994 DEFAULT CHARSET=utf8;
