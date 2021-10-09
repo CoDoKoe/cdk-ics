@@ -1,6 +1,5 @@
 This event table serves as an intermediate table between EGroupeware and AlphaAnywhere application. 
 
-Diese event Tabelle dient als Zwischentabelle zwischen EGroupeware und AlphaAnywhere Applikation. 
 
 CREATE TABLE `event` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
