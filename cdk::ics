@@ -1,0 +1,1994 @@
+'Date Created: 26-Nov-2018 05:10:32 PM
+'Last Updated: 07-Oct-2021 11:53:08 AM
+'Created By  : Cornelius D. Kömpel
+'Updated By  : Cornelius D. Kömpel
+
+
+'siehe localhost/planer/ics_create.php paralle Entwicklung
+
+'Versuch, den Raum als Attendee hinzu zu nehmen 15/09/2021
+'Funktioniert, müsste noch Kategorie hinzu gebucht werden, "Raum1" usw. und für den Termindialog müsste die Raumbelegung ersichtlich sein, nicht ganz einfach
+define class cdk::ics
+
+dim event as p
+dim event.start as c
+dim event.end as c
+dim event.summary as c 			'Termin Text
+dim event.beschreibung as c		'Beschreibung zum Termn
+dim event.kategorien as c		'KRANK, URLAUB, Aktuell
+dim event.attendees as c		'Name der Berater / Teilnehmer: Lami, Fabi, Kheschy
+dim event.sequenz as c
+dim event.uid as C
+dim event.location as c
+'hier immer UTC angeben
+dim event.stamp as c			'Format "20210422T095829Z"
+dim event.created as c			'Format "20210422T095829Z"
+dim event.modified as c			'Format "20210422T095829Z" z am Ende zeigt UTC Time an
+
+dim event.memo_an_berater as l
+dim event.memo_an_uv as l
+dim event.bereitschaft as l 	'Bereitschaftsmerkmal aus dem Dialog für den Termin
+dim event.termin_art as c		'Beratung, Rollikontrolli, hat Einfluß auf die Eintragungen in den Vorgang
+dim event.ScheduleTag as c		'ETag Rückgabe von PUT
+dim event.ETag as c				'ETag Rückgabe von PUT
+dim event.status_code as n		'Rückgabe Wert von PUT
+dim event.caldav_name as c		'Name der ics Datei
+dim event.verzeichnis as c		'Mehrere VG IDs zum Vorgang
+dim event.vg_ids as c
+'Für Ganztagstermine
+dim event.allDay as l
+dim event.az_e as n
+dim event.ma_id as c
+
+'Raum
+dim event.raum as c				'attraum.raum für Raumname und attraum.uuis für UUID des Raumes aus Array raum_id[]
+
+dim attendee as p				'VEVENT Einträge für die Liste der event.attendees, wenn mehrere vorhanden
+dim attendee.name as c
+dim attendee.mail as c
+
+dim fHinweiseOnce as c
+
+dim ics_content as c
+
+dim vevent_template as c
+vevent_template = <<%str%
+BEGIN:VEVENT
+DTSTART;TZID=Europe/Berlin:event.start
+DTEND;TZID=Europe/Berlin:event.end
+LOCATION:event.location
+CATEGORIES:event.kategorien
+SUMMARY:event.summary
+DESCRIPTION:event.beschreibung
+UID:event.uid
+ORGANIZER;CN=4ma 3ma Rehatechnik GmbH:mailto:termin@4ma3ma.de
+<ATTENDEE>
+SEQUENCE:event.sequenz
+STATUS:CONFIRMED
+CREATED:event.created
+LAST-MODIFIED:event.modified
+DTSTAMP:event.stamp
+END:VEVENT
+%str%
+
+dim  attendee_template as c 
+attendee_template = <<%str%
+ATTENDEE;
+ CUTYPE=INDIVIDUAL;
+ ROLE=REQ-PARTICPANT;
+ PARTSTAT=ACCEPTED;
+ RSVP=TRUE;
+ CN=attendee.name:mailto:attendee.mail
+%str%
+
+dim attendee_template_raum as c
+attendee_template_raum = <<%str%
+ATTENDEE;
+CN=attraum.raum;
+ROLE=REQ-PARTICIPANT;
+PARTSTAT=ACCEPTED;
+RSVP=FALSE;
+CUTYPE=RESOURCE;
+X-EGROUPWARE-UID=attraum.uuid
+%str%
+
+dim attendee_cologne as c 
+attendee_cologne = <<%str%
+ATTENDEE;CN="Beratung
+  Köln";ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED;CUTYPE=RESOURCE;RSVP=FALSE;X
+ -EGROUPWARE-UID=r6:urn:uuid:resources-6-89c3d5298eb58b8186fb07d56376a465
+%str%
+
+dim attendee_hamburg as c
+attendee_hamburg = <<%str%
+ATTENDEE;CN=Beratung
+  Hamburg;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED;CUTYPE=RESOURCE;RSVP=FALSE
+ ;X-EGROUPWARE-UID=r14:urn:uuid:resources-14-89c3d5298eb58b8186fb07d56376a4
+ 65
+%str%
+dim attendee_dortmund as c
+attendee_dortmund = <<%str%
+ATTENDEE;CN=Beratung-Dortmund;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED;CUTYPE
+ =RESOURCE;RSVP=FALSE;X-EGROUPWARE-UID=r5:urn:uuid:resources-5-89c3d5298eb5
+ 8b8186fb07d56376a465
+%str%
+dim raum_id[4] as c 
+raum_id[1] = "r1:urn:uuid:resources-1-89c3d5298eb58b8186fb07d56376a465"
+raum_id[2] = "r2:urn:uuid:resources-2-89c3d5298eb58b8186fb07d56376a465"
+raum_id[3] = "r4:urn:uuid:resources-4-89c3d5298eb58b8186fb07d56376a465"
+raum_id[4] = "r25:urn:uuid:resources-25-89c3d5298eb58b8186fb07d56376a465"
+
+'Time Zone Definition siehe rfc 5545, geprüft für 2020 und 2021 gültig
+dim vcalendar_template as c
+vcalendar_template = <<%str%
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:4ma3ma_Organizer
+BEGIN:VTIMEZONE
+TZID:Europe/Berlin
+BEGIN:DAYLIGHT
+TZOFFSETFROM:+0100
+TZOFFSETTO:+0200
+TZNAME:CEST
+DTSTART:19700329T020000
+RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU
+END:DAYLIGHT
+BEGIN:STANDARD
+TZOFFSETFROM:+0200
+TZOFFSETTO:+0100
+TZNAME:CET
+DTSTART:19701025T030000
+RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU
+END:STANDARD
+END:VTIMEZONE
+CALSCALE:GREORIAN
+MEHTOD:REQUEST
+<VEVENT>
+END:VCALENDAR
+%str%
+
+'PUT 
+dim xhr as p
+
+'xhr.header = convert_acp_to_utf8(xhr.header)
+dim xhr.body as c
+
+'Connection zum Webserver
+dim cn_ws as sql::Connection
+
+'Verbindung zu Maria DB,
+dim cn_ma as sql::Connection
+
+
+function ics as v ()
+	'constructor
+	'Baut die Verbindung zum Webserver und Maris DB auf
+	'"::Name::egroupware"
+
+	if self.cn_ws.Open("::Name::egroupware") = .f. then
+		send_error("Keine Verbindung zum Webserver EGroupware")
+	end if
+	'"::Name::4ma3ma MySQL"
+	if self.cn_ma.Open("::Name::4ma3ma MySQL") = .f. then
+		send_error("Keine Verbindung zum Webserver EGroupware")
+	end if
+	
+end function
+
+function ~ics as v ()
+	'destructor
+	'Schließt die Verbindung
+	on error resume next
+	self.cn_ws.close()
+	self.cn_ma.close()
+	'msgbox("Verbindung geschlossen")
+end function
+
+'******************************************************************************
+function event_init as v ()
+	'Zurücksetzen Event Properties
+	self.event.allDay = .F.
+	self.event.bereitschaft = .F.
+	self.event.beschreibung = ""
+	self.event.caldav_name = ""
+	self.event.created = ""
+	self.event.end = ""
+	self.event.ETag = ""
+	self.event.kategorien = ""
+	self.event.attendees = ""
+	self.event.location = ""
+	self.event.ma_id = ""
+	self.event.memo_an_berater = .F.
+	self.event.memo_an_uv = .F.
+	self.event.modified = ""
+	self.event.ScheduleTag = ""
+	self.event.sequenz = ""
+	self.event.stamp = ""
+	self.event.start = ""
+	self.event.status_code = 0
+	self.event.summary = ""
+	self.event.termin_art = ""
+	self.event.uid = ""
+	self.event.verzeichnis = ""
+	self.event.vg_ids = ""
+end function 
+
+'******************************************************************************
+function vevent_create as c ( )
+	'erstellt die VEVENT Sektion der VCALENDAR ics Daten, einschließlich der Attendees
+	'vevent_template wird mit den property event gefüllt
+	dim global vuser as c
+	
+	dim attraum as p
+	dim attraum.raum as c
+	dim attraum.uuid as c
+	
+	' x-id für DB ID
+	dim temp_vevent as c
+	dim temp_attendees as c
+	dim attendeeliste as c
+	temp_vevent = replace_variables_in_string(self.vevent_template,event,"event",.f.)
+	
+	'Attendees hinzufügen, falls angegeben, z.B. event.attendees="Lami,Fabi,Steffi"
+	if event.attendees <> "" then
+		dim attendee as p
+		dim attendee.name as c
+		dim attendee.mail as c
+		dim ma_sql_data as c
+		
+		'Diese Attendee Liste ist nur für Kommission Termine, Ganztagstermin, wie Krank habe auch ein Kategorie, aber Attendee werden aus der ics gestricken
+		'daher muss das event.verzeichnis mit dem Windows-Namen bei Ganztagsterminen in der Funktion az_e_get gesetzt werden
+		attendeeliste = comma_to_crlf(event.attendees)
+
+		for each att in attendeeliste
+			ma_sql_data = convert_utf8_to_acp(sql_get_values(cn_ma,"ma_sql","n='" + alltrim(att.value) + "'","Vn_Real,N_Real,E_Mail" ))
+			attendee.name = word(ma_sql_data,1,"|") + " " + word(ma_sql_data,2,"|")
+			attendee.mail = word(ma_sql_data,3,"|")
+			'attendee.mail = ""
+			
+			temp_attendees = temp_attendees + replace_variables_in_string(attendee_template,attendee,"attendee",.f.) 
+			'für das Benutzerverzeichnis in put, erster Attendee gibt Verzeichnisnamen an
+			if event.verzeichnis = "" then
+				'Hier muss der Windows Name (ACL) eingetragen werden, entnehme aus der Tabelle ma_sql->win_name
+				event.verzeichnis = sql_get_values(cn_ma,"ma_sql","n=" + s_quote(att.value),"win_name")
+				'***** möglicher Fehler, wenn kein win_name eingetragen ist
+			end if
+		next
+		
+		if event.raum <> "" then
+			'Füft den Raum hinzu, wenn vorhanden
+			dim rid as c 
+			dim tmp as c
+			rid = right(event.raum,1)
+			attraum.raum ="Beratung"+rid
+			attraum.uuid = raum_id[eval(rid)]
+			tmp = replace_variables_in_string(attendee_template_raum,attraum,"attraum",.f.)
+			temp_attendees = temp_attendees + tmp	
+		end if	
+
+		'Ressource Beratung Köln, Hamburg oder Dortmund, 		
+		if event.location = "Köln" then
+			temp_attendees = temp_attendees + crlf() + attendee_cologne
+		else if event.location = "Hamburg" then
+			temp_attendees = temp_attendees + crlf() + attendee_hamburg
+		else if event.location = "Dortmund" then
+			temp_attendees = temp_attendees + crlf() + attendee_dortmund
+		end if
+		
+	
+		
+		temp_vevent = strtran(temp_vevent,"<ATTENDEE>",temp_attendees)			
+	else
+		'sonst Platzhalter raus nehmen
+		temp_vevent = strtran(temp_vevent,"<ATTENDEE>","")
+	end if
+	
+	vevent_create = temp_vevent
+end function
+
+'******************************************************************************
+
+function vevent_create_allDay as c ( )
+	'erstellt die VEVENT Sektion der VCALENDAR ics Daten, einschließlich der Attendees
+	'vevent_template wird mit den property event gefüllt
+	'hierbei werden die Termine als Ganztagstermine verarbeitet, folgende Änderungen am Template
+	'DTSTART;VALUE=DATE:20210320
+	'DTEND;VALUE=DATE:20210321
+	'Das Ende muss für den nächsten Tag sein, EGroupware trägt dann hier 20210320T235900Z ein
+	'TRANSP:TRANSPARENT
+	'Mit diesem Eintrag wird der Ganztagstermin in Egroupware nicht über den ganzen Tag angezeigt, sondern nur oben im Kalender
+	'CATEGORIES:KRANK
+	'Hier kann man Kategorien angeben
+
+	' x-id für DB ID
+	dim temp_vevent as c
+
+	'Kerndaten eintragen, Verwendung template
+	temp_vevent = replace_variables_in_string(self.vevent_template,event,"event",.f.)
+	
+	'Transparent - nicht blockieren für EGroupware
+	temp_vevent = strtran(temp_vevent,"LOCATION:", "TRANSP:TRANSPARENT")
+	
+	'Attendees benötigen wir hier nicht
+	temp_vevent = strtran(temp_vevent,"<ATTENDEE>","")	
+	
+	'TZID=Europe/Berlin
+	temp_vevent = strtran(temp_vevent,"TZID=Europe/Berlin","VALUE=DATE")
+
+	vevent_create_allDay = remove_blank_lines(temp_vevent)
+end function
+
+'******************************************************************************
+
+function vcalendar_create as l ()
+	'Erstellt die ics Daten in der globalen Variabel ics_content
+	'event.allDay z.B. Mitarbeiter Kalenderdaten aus az_e
+	
+	'VEVENT einsetzen
+	dim vevent as c
+	if event.allDay = .t. then
+		vevent = vevent_create_allday()
+	else
+		vevent = vevent_create()	
+	end if
+	
+	self.ics_content = strtran(vcalendar_template,"<VEVENT>",vevent)
+
+	'Alles über 70 mit Umbruch versehen
+	self.ics_content = vcalendar_70(self.ics_content)
+
+	'dat janze als utf8
+	self.ics_content = convert_acp_to_utf8(self.ics_content)
+	return .t.
+end function
+
+'******************************************************************************
+
+function vcalendar_70 as c ( ics_data )
+	'Zeilenumbruch nach 70 Zeichen, mit einem Leerzeichen in der nächsten Zeile
+	'Leerzeilen entfernen
+	dim temp_line as c
+	dim temp_ics as c
+	for each line in ics_data
+		if len(line.value) > 68 then
+			temp_line = ""
+			while len(line.value) > 68
+				temp_line = temp_line + left(line.value,68) + crlf()
+				line.value = " " + substr(line.value,69)	
+			end while	
+			temp_ics = temp_ics + temp_line + line.value + crlf()
+		else
+			temp_ics = temp_ics + line.value + crlf()
+		end if
+	next
+	temp_ics = remove_blank_lines(temp_ics)
+	vcalendar_70 = temp_ics
+end function
+
+'******************************************************************************
+
+function ics_put as l ( body as c )
+	'Sende per PUT den Termin an EGroupware
+	'Neue Termine mit If-None_Match: *
+	'Update Termine mit If-None-Matsch mit UUID
+
+	dim result as p
+	dim global vuser as c
+	dim flag_show as l = .f.
+	if vuser = "Cornelius" then
+		flag_show = .f.
+	end if
+	dim	xhr.host as c = "webserver.intaern.4ma3ma.de"
+	dim xhr.page as c = "egroupware/groupdav.php/<verzeichnis>/calendar/<dateiname>"
+	dim xhr.method as c = "PUT"
+	
+	dim xhr.header as c = <<%str%
+Content-Type: text/calendar; charset=utf-8; component=VEVENT
+If-None-Match: *
+Authorization: Basic Y29ybmVsaXVzOmNvZG8zY29t
+Accept: text/html
+%str%
+	'Squenz > 0 bedeutet, dass wir schon einen Termin angelegt hatten, dann Match ändern
+	dim n_squenz as n
+	n_squenz = convert_type(event.sequenz,"N")
+	if n_squenz > 0 then
+		xhr.header = <<%str%
+Content-Type: text/calendar; charset=utf-8; component=VEVENT
+If-None-Match: <uid>
+Authorization: Basic Y29ybmVsaXVzOmNvZG8zY29t
+Accept: text/html
+%str%
+	xhr.header = strtran(xhr.header,"<uid>",event.uid )
+	end if
+	
+
+	xhr.page = strtran(xhr.page,"<verzeichnis>",event.verzeichnis)
+	xhr.page = convert_acp_to_utf8(strtran(xhr.page,"<dateiname>",event.caldav_name))
+	xhr.body = self.ics_content
+	'showvar( xhr )
+	'return .t.
+
+	result = http_fetch(xhr,flag_show)
+	'showvar(result.parsed_headers)
+	
+	'Result verarbeiten
+	event.status_code = result.parsed_headers.status_code
+	
+	if event.status_code = 201 then
+		event.ETag = substr(result.parsed_headers.ETag,2,len(result.parsed_headers.ETag)-2)	
+		event.ScheduleTag = substr(result.parsed_headers.ScheduleTag,2,len(result.parsed_headers.ScheduleTag)-2)		
+	else if event.status_code = 204 then
+		'event.ETag = ""
+		'event.ScheduleTag = ""	
+		event.ETag = substr(result.parsed_headers.ETag,2,len(result.parsed_headers.ETag)-2)	
+		event.ScheduleTag = substr(result.parsed_headers.ScheduleTag,2,len(result.parsed_headers.ScheduleTag)-2)	
+	else
+		on error resume next
+		send_error("cdk::ics.ics_delete(); " + result.parsed_headers.status_code)
+		on error goto 0
+		return .f.
+	end if
+	'ui_msg_c("EGroupware Eintrag erfogt",2)
+	return .t.
+end function
+
+
+'******************************************************************************
+
+FUNCTION ics_get AS C (cal_id as n )
+	'Holt per GET den Termin aus EGroupware
+	'Parameter: CAL_ID der event
+	
+	dim result as p
+	dim global vuser as c
+	dim flag_show as l = .f.
+	if vuser = "Cornelius" then
+		flag_show = .f.
+	end if
+	
+	dim e as c
+	dim uid as c
+	dim caldav_name as c
+	
+	e = sql_get_values(self.cn_ma,"event","cal_id = " + cal_id,"uuid,caldav_name" )
+	if e = "" then
+		return "ERROR: Dieser Termin ist nicht gelistet in der Tabelle event"
+	end if
+	uid = word(e,1,"|")
+	caldav_name = word(e,2,"|")
+	
+	dim	xhr.host as c = "webserver.intaern.4ma3ma.de"
+	
+	'Verzeichnis nicht notwendig, Dateiname reicht aus
+	dim xhr.page as c = "egroupware/groupdav.php/calendar/<dateiname>"
+	dim xhr.method as c = "GET"
+	
+	dim xhr.header as c = <<%str%
+Content-Type: text/calendar; charset=utf-8; component=VEVENT
+Authorization: Basic Y29ybmVsaXVzOmNvZG8zY29t
+Accept: text/json
+%str%
+
+	xhr.header = strtran(xhr.header,"<uid>",uid )
+	xhr.page = convert_acp_to_utf8(strtran(xhr.page,"<dateiname>",caldav_name))
+
+	result = http_fetch(xhr,flag_show)
+	'showvar(result.parsed_headers)
+	
+	'Result verarbeiten
+	if result.parsed_headers.status_code = 200 then
+		'showvar(result.body)
+		return result.body
+	else
+		return "ERROR: 404 oder so - GET keine Antwort"
+	end if
+	
+END FUNCTION
+
+'******************************************************************************
+
+function ics_delete as l ( )
+	'Sende per PUT den Termin an EGroupware
+	dim result as p
+	dim global vuser as c
+	dim flag_show as l = .f.
+	if vuser = "Cornelius" then
+		flag_show = .f.
+	end if
+	dim	xhr.host as c = "webserver.intaern.4ma3ma.de"
+	dim xhr.page as c = "egroupware/groupdav.php/<verzeichnis>/calendar/<dateiname>"
+	dim xhr.method as c = "DELETE"
+	
+	dim xhr.header as c
+	xhr.header = <<%str%
+Authorization: Basic Y29ybmVsaXVzOmNvZG8zY29t
+Accept: text/html
+%str%
+	xhr.page = strtran(xhr.page,"<verzeichnis>",event.verzeichnis)
+	xhr.page = convert_acp_to_utf8(strtran(xhr.page,"<dateiname>",event.caldav_name))
+	xhr.body = ""
+	'showvar( xhr )
+	'return .t.
+
+	result = http_fetch(xhr,flag_show)
+	'showvar(result.parsed_headers)
+	
+	'Result verarbeiten
+	event.status_code = result.parsed_headers.status_code
+	if event.status_code <> 204 then
+		on error resume next
+		send_error("cdk::ics.ics_delete(); " + result.parsed_headers.status_code)
+		on error goto 0
+		return .f.
+	end if
+	'ui_msg_c("Eintrag aus EGroupware entfernt",2)
+	return .t.
+end function
+
+'******************************************************************************
+
+FUNCTION event_get AS L ( )
+	'Dialog für die Terminerstellung in Level 1
+	'Daten für einen Termin aus Ansicht und wenn Daten vollständige angegeben sind, werden die Daten in event gespeichert
+
+	on error goto error_event_get
+	'Variabeln für die Vorgangsaten zur Terminerstellung		
+	dim global cquery as cdk::cquery
+	dim global vuser as c
+	dim short_sign as c
+	dim N_Md_Alias as c
+	DIM vg_id as C
+	DIM kom_id as C
+	DIM n_alias as C
+	DIM datum as D	
+	DIM start as C 
+	DIM dauer as N 
+	DIM title as C
+	DIM kategorien as C
+	dim attendees as c
+	DIM filiale as c 
+	DIM raum as c	
+	DIM varC_result as C
+	dim beraterliste as c
+	dim memo_an_berater as l
+	dim memo_an_uv as l
+	dim vg_ids as c
+	dim ende as c = ""
+	'wenn weitere VG IDs angegeben werden sollen
+	dim vg_ids as c
+	
+	dim b as n		'Anzahl der Bereitschaftstermine
+	dim btext as c	'Hinweis zur Bereitschaftstermine
+	dim bMatext as c'Wer hat Bereitschaft
+	
+	'datum = {09.10.2020}
+	'start = "15:30"
+	'dauer = 30
+	
+	'Daten für den Termin
+	vg_id = cquery.vg_id
+	kom_id = cquery.kom_id
+	n_alias = alltrim(lookupc("F",cquery.kom_id,"n_alias","kom","id"))
+	
+	beraterliste = sql_get_values(cn_ma,"ma_sql","ex=0 AND berater = 1","N")
+	'Nicht Rose und Markus, sind aber als Berater in der DB
+	beraterliste = word_subtract(beraterliste,"Markus" + crlf() + "Rose",crlf())
+	temp_count = w_count(beraterliste,crlf())
+	DELETE a_berater
+	DIM a_berater[temp_count] as c
+	a_berater.initialize(beraterliste)
+	dim temp_attendees as c
+	
+	'Header
+	dim xDlgHeader as p
+	xDlgHeader.HeadingText = n_alias
+	xDlgHeader.Image = "egroupware"
+	xDlgHeader.BodyText = "Vorgang: " + vg_id 
+	
+	dim a_dauer[20] as c
+	a_dauer[1] = "30"
+	a_dauer[2] = "60"
+	a_dauer[3] = "90"
+	a_dauer[4] = "120"
+	a_dauer[5] = "150"
+	a_dauer[6] = "180"
+	a_dauer[7] = "210"
+	a_dauer[8] = "240"
+	a_dauer[9] = "270"
+	a_dauer[10] = "300"
+	a_dauer[11] = "330"
+	a_dauer[12] = "360"
+	a_dauer[13] = "390"
+	a_dauer[14] = "420"
+	a_dauer[15] = "450"
+	a_dauer[16] = "480"
+	a_dauer[17] = "510"
+	a_dauer[18] = "540"
+	a_dauer[19] = "570"
+	a_dauer[20] = "600"
+
+	
+	
+	DELETE a_start
+	DIM a_start[20] as c
+	dim temp_list as c
+temp_list = <<%list%
+8:00
+8:30
+9:00
+9:30
+10:00
+10:30
+11:00
+11:30
+12:00
+12:30
+13:00
+13:30
+14:00
+14:30
+15:00
+15:30
+16:00
+16:30
+17:00
+17:30
+18:00
+
+%list%
+a_start.initialize(temp_list)
+
+DELETE a_termin_add
+DIM a_termin_add[12] as c
+dim temp_list as c
+temp_list = <<%list%
+Beratung Neuversorgung
+Beratung Anpassung
+Beratung Instandsetzung
+Durchführung Instandsetzung
+Beratung Rollikontrolli
+Sitzprobe
+Zweite Sitzprobe
+Auslieferung
+Nacharbeit
+Not-Reparatur
+WA1TAG
+WA2TAGE
+Rolli wird zu WA gebracht
+%list%
+a_termin_add.initialize(temp_list)
+
+delete a_standort
+dim a_standort[4] as c
+dim temp_standort as c 
+temp_standort = <<%str%
+Dortmund
+Köln
+Hamburg
+%str%
+filiale = a5_eval_expression("=alltrim(vg->O_Ber)")
+select
+	case filiale = "DO"
+		filiale = "Dortmund"
+	case filiale = "HH"
+		filiale = "Hamburg"
+	case filiale = "K"
+		filiale = "Köln"
+end select
+a_standort.initialize(temp_standort)
+
+'Raum erst mal rausgenommen
+delete a_raum
+dim a_raum[4] as c
+dim tmp_raum as c 
+tmp_raum = <<%str%
+Beratungsraum 1
+Beratungsraum 2
+Beratungsraum 3
+Beratungsraum 4
+%str%
+a_raum.initialize(tmp_raum)
+
+'Bereitschaft
+dim bereitschaft as l
+dim memo_an_uv as l
+dim memo_an_b as l
+dim bhinweise as c 
+dim ergebnis as c		'Arbeitszeithinweise, Krank, Urlaub oder Arbeitszeiten
+
+'Kürzel von ma_sql für User holden
+short_sign = sql_get_values(cn_ma,"ma_sql","n='" + vuser + "'","short_sign",.t.,1)
+
+'Modell
+N_Md_Alias = alltrim(lookupc("F",cquery.md_id,"N_md_alias","md","id"))
+
+'Termin Daten vorbereiten
+title = "(" + short_sign + ") - " + cquery.vg_id + " - " + n_alias + " - " + N_Md_Alias
+
+'Name des Beraters attendees
+attendees = alltrim(a5_eval_expression("=vg->n_b"))
+
+ok_button_label = "&OK"
+cancel_button_label = "&weg damit"
+vg_id = cquery.vg_id
+varC_result = ui_dlg_box("Termin erstellen" ,<<%dlg%
+{stretch=width}
+{XdialogTitleSection=45,4xDlgHeader};
+{ysize=2}
+{xmargin=4,4}
+{region=m}
+{lf};
+Datum:| [%DATE;P=popup.calendar(dtoc(datum));I=popup.calendar%.16datum!datum_*];
+Bereitsch.| {text=%O={@@}%90,1:bMatext};
+Bereitsch.| {text=%O={@@}%90,1:btext};
+Uhrzeit:| [%v%.7start^=a_start!tende] - {text=7,1:ende} Dauer in Minuten: [%v%.7dauer^=a_dauer!tende];
+Was:| [%v%.37termin_add^=a_termin_add!termin_add] Weitere Vorgänge z.B. 41245,51347: [.22,vg_ids!vg_ids_event*];
+Termin:| [%mw%.100,3title];
+{endregion};
+
+{region=berater}
+Berater:| [.60attendees];
+Memo: | (40memo_an_berater);
+{region=hinweise}
+Hinweise für die Beraterauswahl;
+{text=60,4bhinweise};
+{endregion}
+{endregion}
+
+{region=auswahl}
+Auswahl: | [%M%.24,9temp_attendees^#beraterliste!select];
+{endregion};
+{region=n}
+Filiale:| [%v%.37filiale^=a_standort] Woanders: [.32filiale];
+{endregion};
+{condition=(filiale='Dortmund' .or. filiale = 'Köln')}
+{region=a}
+Memo an UV: (40memo_an_uv) | 
+{condition=(filiale='Dortmund')}
+{region=b}
+Bereitschaft: |(40bereitschaft!kategorie) | Raum: |[%v%.20raum^=a_raum!raum_event];
+{endregion};
+{endregion};
+{condition=.t.}
+{line=1,0};
+{region}
+<*15=ok_button_label!OK> <15=cancel_button_label!CANCEL>
+{endregion};
+%dlg%,<<%code%
+if a_dlg_button = "raum_event" then
+	a_dlg_button = ""
+	event.raum = raum
+end if
+if a_dlg_button = "kategorie" then
+	a_dlg_button = ""
+	if bereitschaft then
+		event.kategorien = "Bereitschaft"
+	else
+		event.kategorien = ""
+	end if
+end if
+if a_dlg_button = "select" then
+	dim temp as c
+	temp = crlf_to_comma(temp_attendees)
+	temp = strtran(temp,",",", ")
+	attendees = temp
+	
+	'Urlaub, Krank oder Arbeitzeiten
+	ergebnis = Urlaub( attendees, datum )
+	if "ERROR" $ ergebnis = .f. then
+		bhinweise = ergebnis
+	end if
+	a_dlg_button = ""
+	
+end if
+if left(a_dlg_button,6) = "datum_" then
+	if a_dlg_button = "datum_killfocus" then
+		datum = ctod(dtoc(datum))
+	end if
+	a_dlg_button = ""
+	
+	'Bereitschaftsanzeige
+	dim ics as cdk::ics
+	dim fHinweise as c
+	btext = ics.getBereitschaft_ex(datum)
+	bMatext = ics.getBereitschaftMitarbeiter(datum)
+
+	fHinweise = self.getFertigungsHinweise(datum)
+	if fHinweise <> "" then
+		ui_msg_box("Fertigungshinweise von " + f_upper( word(fHinweise,2,":")),word(fHinweise,1,":"),UI_ATTENTION_SYMBOL+UI_OK)
+	end if
+	'Urlaub, Krank oder Arbeitzeiten
+	ergebnis = Urlaub( attendees, datum )
+	if "ERROR" $ ergebnis = .f. then
+		bhinweise = ergebnis
+	end if
+end if
+
+if left(a_dlg_button,12) = "vg_ids_event" then
+
+	if a_dlg_button <> "vg_ids_eventkillfocus" then
+		a_dlg_button = ""	
+		exit function
+	end if
+	a_dlg_button = ""
+		
+	'maximal 2 Vorgangs-ID erlaubt
+	dim vg_ids_count as n
+	vg_ids_count = w_count(vg_ids,",")
+	if vg_ids_count > 2 then
+		vg_ids = word(vg_ids,1,",") + "," + word(vg_ids,2,",")
+		msgbox("Hinweis","Maximale Anzahl der weiteren Vorgänge überschritten, keine weitere Angabe möglich.",UI_ATTENTION_SYMBOL+UI_OK)
+	end if
+	
+	'prüfe ob Vorgangs-IDs existieren
+	dim vg_id_check as n
+	dim vg_id_temp as n
+	'zur Liste
+	vg_ids = comma_to_crlf(vg_ids)
+	'dopplte Einträge will ich nicht
+	vg_ids = *remove_duplicates(vg_ids,crlf())
+	'Liste prüfen, wenn Fehler sind wir raus
+	for each vgid in vg_ids
+		vg_id_temp = lookupn("F",convert_type(vgid.value,"N"),"id","vg","id")
+		if vg_id_temp <> convert_type(vgid.value,"N") then
+			msgbox("Hinweis","Bitte die weiteren Vorgangs-IDs prüfen. Eine Vorgangs-ID ist nicht richtig",UI_ATTENTION_SYMBOL+UI_OK)
+			exit function
+		end if
+	next
+	'Wenn Püfung bestanden, dann zurück zum Komma String
+	vg_ids = crlf_to_comma(vg_ids)
+	
+	'zurück zum Ursprung
+	title = "(" + short_sign + ") - " + cquery.vg_id + " - " + n_alias + " - " + N_Md_Alias + vg_ids
+	title = title + " - " + termin_add
+	if vg_ids <> "" then	
+		'dann hinzufügen
+		title = "(" + short_sign + ") - " + cquery.vg_id + ", " + vg_ids + " - " + n_alias + " - " + N_Md_Alias + " - " + termin_add
+	end if
+end if
+
+if a_dlg_button = "termin_add" then
+	a_dlg_button = ""
+	'zurück zum Ursprung
+	title = "(" + short_sign + ") - " + cquery.vg_id + " - " + n_alias + " - " + N_Md_Alias + vg_ids
+	title = title + " - " + termin_add
+	if vg_ids <> "" then	
+		'dann hinzufügen
+		title = "(" + short_sign + ") - " + cquery.vg_id + ", " + vg_ids + " - " + n_alias + " - " + N_Md_Alias + " - " + termin_add
+	end if
+	event.termin_art = termin_add
+	
+	'Bereitschaft hinzubuchen, wenn filiale "Dortmund" und Memo an UV
+	if "Instandsetzung" $ title .or. "Rollikontrolli" $ title then
+		if filiale = "Dortmund" then
+			bereitschaft = .t.	
+			event.kategorien = "Bereitschaft"
+		end if
+		memo_an_uv = .t.
+		event.memo_an_uv = memo_an_uv
+	end if
+	
+end if
+if a_dlg_button = "OK" then
+	'Termin eintragen
+	
+	'Vollstänige Datenangabe prüfen
+	delete msg_fehlt
+	dim msg_fehlt as c
+	msg_fehlt = if( vg_id = "", "Keine Vorgangs-ID" + crlf(),"")
+	msg_fehlt = if( kom_id = "", msg_fehlt + "Keine KOM-ID" + crlf(),msg_fehlt)
+	msg_fehlt = if( n_alias = "", msg_fehlt + "Keine Kommission" + crlf(),msg_fehlt)
+	msg_fehlt = if( dtoc(datum) = "  .  .    ", msg_fehlt + "Kein Datum" + crlf(), msg_fehlt )
+	msg_fehlt = if( start = "", msg_fehlt + "Keine Uhrzeit" + crlf(), msg_fehlt )
+ 	msg_fehlt = if( dauer = 0, msg_fehlt + "Keine Dauer" + crlf(),msg_fehlt )
+	msg_fehlt = if( title = "", msg_fehlt + "Keine Terminangabe" + crlf(), msg_fehlt )
+	msg_fehlt = if( attendees = "", msg_fehlt + "Keine Berater" + crlf(), msg_fehlt )
+	msg_fehlt = if( filiale = "", msg_fehlt + "Keine Standort" + crlf(), msg_fehlt )
+	
+	'Meldung, wenn vorhanden
+	if msg_fehlt <> "" then
+		msgbox("Hinweis",msg_fehlt,UI_STOP_SYMBOL+UI_OK)
+		a_dlg_button = ""
+		exit function
+	end if
+	delete msg_fehlt	
+
+	'Lokale Zeite in der Form 20201003T130000
+	'wenn ende < start, dann geht der Termin über 24:00 dies ist nicht möglich
+	if time("0h0m0s",convert_type(start,"Y")+dauer*60) < time("0h0m0s",convert_type(start,"Y")) then
+		msgbox("Hinweis","Der Termin geht an oder über die 24:00 Uhr Grenze, bitte Uhrzeit oder Dauer ändern.",UI_ATTENTION_SYMBOL+UI_OK)
+		a_dlg_button = ""
+		exit function
+	end if
+
+	event.start = "" + year(datum)+ padl(""+month(datum),2,"0") + padl(""+day(datum),2,"0") + "T" + time("0h0m0s",convert_type(start,"Y"))
+	event.end = "" + year(datum)+ padl(""+month(datum),2,"0") + padl(""+day(datum),2,"0") + "T" + (time("0h0m0s",convert_type(start,"Y") + dauer * 60))
+	event.summary = title
+
+	'Bild hinzufügen
+	'15/09/2021 im Prinzip geht es, aber die html entities werden encoded und erscheinen als Text, nicht als Icons - Scheiß Sicherheitsfreaks von EGroupware
+'	html_icon = self.summaryBaIcons(attendees)
+'	if html_icon <> "" then
+'		event.summary = event.summary + html_icon
+'	end if
+	
+	event.beschreibung = ""	
+		
+	'Ersetze Fabian durch Fabi
+	attendees = strtran(attendees,"Fabian","Fabi")
+	
+	event.attendees = attendees
+	event.sequenz = convert_type(0,"C")
+	event.uid = api_uuidcreate()
+	event.caldav_name = "4ma-" + event.uid + ".ics"
+	event.location = filiale
+	event.created = left(strtran_multi(date_to_utc_date(now()),"-"+crlf()+":"+crlf(),""+crlf()+""+crlf()),15)+"Z"
+	event.modified = event.created
+	event.stamp = left(strtran_multi(date_to_utc_date(now()),"-"+crlf()+":"+crlf(),""+crlf()+""+crlf()),15)+"Z"
+	
+	'merken, wenn Memo an Berater raus soll
+	
+	event.memo_an_berater = memo_an_berater
+	event.memo_an_uv = memo_an_uv
+	event.bereitschaft = bereitschaft
+	
+	'Weiter Vorgänge
+	if vg_ids <> "" then
+		event.vg_ids = vg_ids
+	else
+		event.vg_ids = ""
+	end if
+	
+	event_get = .t.
+end if
+if a_dlg_button = "tende" then
+	a_dlg_button = ""
+	ende = "" + (time("0h:0m",convert_type(start,"Y") + dauer * 60))
+	if ende = "" then
+		ende = "24:00"
+	end if
+end if
+if a_dlg_button = "CANCEL" then
+	event_get = .f.
+end if
+
+%code%)
+
+
+ende_event_get:
+	on error resume next
+	delete short_sign 
+	delete N_Md_Alias 
+	delete vg_id 
+	delete kom_id 
+	delete n_alias 
+	delete datum 
+	delete start 
+	delete dauer 
+	delete title 
+	delete kategorien 
+	delete attendees
+	delete varC_result 
+	delete filiale 
+	delete raum 	
+	delete xDlgHeader 
+	delete a_start
+	delete temp_list 
+	delete a_termin_add
+	delete temp_list 
+	delete a_standort 
+	delete temp_standort  
+	delete a_raum
+	delete tmp_raum  
+	on error goto 0
+	exit function	
+
+error_event_get:
+	on error resume next
+	dim global vrechner as c
+	dim global vuser as c
+	dim zeile as c
+	zeile = "" + time("dd.MM.yyyy 0h:0m", now()) + ";Anmeldename: " + vUser + ";Rechner: " + vRechner + ";cdk::ics.event_get();Zeile: " + error_line_number_get() + ";Error No. " + error_code_get() + ";Error Text: " + error_text_get(error_code_get()) + crlf()
+	send_error(zeile)
+	goto ende_event_get
+
+	
+
+END FUNCTION
+
+'******************************************************************************
+
+function az_e_get as l( az_e_id as n, hinweis as l = .t.)
+	'Prüft ob in der Tabelle az_e unter der ID relevante Daten für EGroupware vorliegen
+	'Relevant sind krank, krarenz_tag, urlaub, su, g_Std
+	'Relevant neu sind auch NIH (Nicht im Hause, DF ausserhaus, L) und Vertretung (I_Vert, L)
+	'wenn etwas gefunden, dann Eintrag in globale Variable event und return true, sonst false
+	delete az_e
+	dim az_e as p
+	dim start as d
+	dim ende as d
+	dim e as p
+	dim n_squenz as n
+
+	'Event Obejekt neu initialisieren, damit keine Daten vom Vortag übernommen werden
+	event_init()
+
+	'Parameter prüfen
+	if az_e_id <= 0 then
+		send_error("cdk::ics.az_e_get() " + " az_e->id <= 0 Wert az_e_id: " + az_e_id )
+		return .f.
+	end if
+
+	'hier bekomme ich schon mal ein lookup Fehler, az_e scheint dann nicht NULL sein, daher ohen delete az_e eingesetzt
+	az_e = sql_lookup_multi(cn_ma,"az_e","id = " + az_e_id,"v_ma_id,Datum,SU,g_std,ohne_bez,Krank,Karenz_tag,f_zeit,Urlaub,I_Vert,ausserhaus, Bemerkung")
+
+	'Keine Daten aus az_e Tabelle
+	if is_object(az_e) = .f. then
+		send_error("cdk::ics.az_e_get() " + "Fehler bei az_e->id " + az_e_id + " keinen DS gefunden")
+		return .f.
+	end if
+
+	'Verzeichnisname holen, ohne win_name kein Kalender
+	event.verzeichnis = sql_lookup(cn_ma,"ma_sql","id="+az_e.v_ma_id,"win_name")
+	if event.verzeichnis = "" then
+		'benötige keine Fehlermeldung an dieser Stelle, Edina und Jana z.B. haben keinen Kalender in EGroupware
+		'send_error("cdk::ics.az_e_get() Keinen Eintrag in ma_sql->win_name bei ma_sql->id = " + az_e.v_ma_id)
+		return .f.
+	end if
+	
+	'Prüfung, ob es schon einen Eintrag in EGroupware existiert in evetn Tabelle
+	e = sql_lookup_multi(cn_ma,"event","v_az_e = " + az_e_id,"id,cal_id,ETag,caldav_name,uuid")	
+
+	'Wenn es einen DS in egw_cal geben soll, dann hole sequenz, gepspeichert in cal_etag
+	if is_object(e) then
+		'Bestehende Daten übernehmen
+		n_squenz = sql_lookup(cn_ws,"egw_cal","cal_id = " + e.cal_id,"cal_etag")
+		n_squenz = n_squenz + 1
+		event.sequenz = convert_type(n_squenz,"C")
+		event.uid = e.uuid
+		event.caldav_name = e.caldav_name	
+		event.ETag = e.ETag	
+		
+	else
+		'Neuen Eintrag vorbereiten
+		event.uid = api_uuidcreate()
+		event.caldav_name = "4ma-" + event.uid + ".ics"
+		event.sequenz = convert_type(0,"C")	
+	end if
+
+	'Nur Krank oder Urlaub, Fehlzeit
+	if az_e.krank = "T" .or. az_e.Karenz_tag = "T" then
+		event.kategorien = "KRANK"
+		event.summary = "Krank"
+		
+	'Urlaub
+	else if az_e.Urlaub = "T" .or. az_e.su = "T" .or. az_e.g_std = "T" .or. az_e.ohne_bez = "T" then
+		event.kategorien = "URLAUB"
+		event.summary = "Urlaub"
+	
+	'Ohne Hinweisabfrage, wenn z.B. Kalender für einen Zeitraum durchlaufen wird
+
+	'Fehlzeit, 
+	else if az_e.f_zeit = "T" then
+		event.kategorien = "Aktuell"
+		if hinweis then
+			event.summary = ui_get_text("Hinweis Fehlzeit für EGroupeware","",convert_utf8_to_acp(az_e.Bemerkung))
+		else
+			if az_e.Bemerkung = "" then
+				event.summary = "Hinweis zu Fehlzeit fehlt zur Zeit"	
+			else
+				event.summary = convert_utf8_to_acp(az_e.Bemerkung)
+			end if
+			
+		end if
+	'NIH Ausserhaus
+	else if az_e.ausserhaus = "T" then
+		event.kategorien = "Aktuell"
+		if hinweis then
+			event.summary = ui_get_text("Hinweis NIH für EGroupeware","",convert_utf8_to_acp(az_e.Bemerkung))
+		else
+			if az_e.Bemerkung = "" then
+				event.summary = "Außer Haus"	
+			else
+				event.summary = convert_utf8_to_acp(az_e.Bemerkung)
+			end if
+		end if		
+	'Vertretung
+	else if az_e.I_Vert = "T" then
+		event.kategorien = "Aktuell"
+		if hinweis then
+			event.summary = "Vert. " + ui_get_text("Hinweis Vertretung für EGroupeware","",convert_utf8_to_acp(az_e.Bemerkung))
+		else
+			if az_e.Bemerkung = "" then
+				event.summary = "Vertretung"	
+			else
+				event.summary = "Vert. " + convert_utf8_to_acp(az_e.Bemerkung)
+			end if
+		end if
+		
+		
+	'weder Urlaub noch Krank, noch Fehlzeit
+	else 
+		'Gabe es schon einen Eintrag, dann squenz > 0
+		if convert_type(event.sequenz,"N") > 0 then
+			'Termin löschen
+			if self.ics_delete() then
+				
+				'jetzt noch DS in event löschen
+				dim sql as c
+				sql = "DELETE FROM event WHERE v_az_e = " + az_e_id
+
+				'Execute SQL
+				if .not. self.cn_ma.execute(sql) then
+				    send_error("cdk::ics.az_e_get() " + self.cn_ma.CallResult.text)
+				    return .f.
+				    'end
+				end if
+			end if
+		end if
+		'nicht Krank, Urlaub oder Fehlzeit und DS ggf. gelöscht, return .f., da es nichts mehr zu tuen gibt
+		return .f.
+	end if
+	
+	'Weiter, wenn Krank, Urlaub oder Fehlezeit, Event Daten setzen, 
+	event.location = ""
+	event.beschreibung = ""
+	
+	'UTC, daher Z am Ende anhängen
+	event.created = left(strtran_multi(date_to_utc_date(now()),"-"+crlf()+":"+crlf(),""+crlf()+""+crlf()),15)+"Z"
+	event.modified = event.created
+	event.stamp = left(strtran_multi(date_to_utc_date(now()),"-"+crlf()+":"+crlf(),""+crlf()+""+crlf()),15)+"Z"
+	event.ma_id = convert_type(az_e.v_ma_id,"C")
+	
+	'event ist immer ein Ganztagstermin
+	event.allDay = .t.
+	event.az_e = az_e_id
+	
+	start = convert_type(az_e.datum,"D")
+	ende = start + 1
+	event.start = "" + year(start)+ padl(""+month(start),2,"0") + padl(""+day(start),2,"0")
+	event.end = "" + year(ende)+ padl(""+month(ende),2,"0") + padl(""+day(ende),2,"0")
+
+	return .t.
+end function
+
+'******************************************************************************
+
+function memo_an_b_create as l ()
+	'Erstellt eine Memo an die angegebenen Berater
+	dim lst_b as c
+	dim von as n 
+	dim an as n
+	dim global vuser as c
+	dim global cquery as cdk::cquery
+	dim tbl as p
+	dim commit_flag as l = .t.
+	dim summary as c
+	dim termin as c
+	dim global vuser as c
+
+	if cquery.vg_id <= 0 then
+		return .f.
+	end if
+	
+	von = sql_get_values(cn_ma,"ma_sql","n='" + vuser + "'","ID" )
+	if von <= 0 then
+		return .f.
+	end if
+	termin = substr(event.start,7,2)+"." + substr(event.start,5,2)+ "." +substr(event.start,1,4) + " " + substr(event.start,10,2) + ":" + substr(event.start,12,2)
+	termin = cdow(convert_type(termin,"D"),.t.)+", " + termin 
+	summary = "Termin: " + termin + " - " + substr(event.summary,at("-",event.summary,2)+1)
+	
+	lst_b = event.attendees
+	lst_b = comma_to_crlf(lst_b)
+	for each b in lst_b
+		an = sql_get_values(cn_ma,"ma_sql","n='" + alltrim(b.value) + "'","ID" )
+		
+		tbl = table.open("info",FILE_RW_SHARED)
+		on error goto error_tbl
+		tbl.enter_begin(.t.)
+		tbl.v_kom = cquery.kom_id
+		tbl.v_vg = cquery.vg_id
+		tbl.v_vg2 = cquery.vg_id
+		tbl.datum = date()
+		tbl.an = an
+		tbl.von = von
+		tbl.news = summary
+		tbl.enter_end(commit_flag)
+		tbl.close()
+	next
+	return commit_flag
+error_tbl:
+	msgbox("Fehler","Memo an Berater konnte nicht erstellt werden.",UI_ATTENTION_SYMBOL+UI_OK)
+	commit_flag = .f.
+	resume next
+	
+end function
+
+'******************************************************************************
+
+function memo_an_uv_crate as l ()
+	'Erstellt eine Memo an UV
+	
+	dim von as n 
+	dim an as n = 518	'UV
+	dim global vuser as c
+	dim global cquery as cdk::cquery
+	dim tbl as p
+	dim commit_flag as l = .t.
+	dim summary as c
+	dim termin as c
+	
+	if cquery.vg_id <= 0 then
+		return .f.
+	end if
+	
+	von = sql_get_values(cn_ma,"ma_sql","n='" + vuser + "'","ID" )
+	if von <= 0 then
+		return .f.
+	end if
+	dim global vuser as c
+
+	'event.summary kommt mit unnötigen Info daher C+ - 44501 - Termintext, 
+	termin = substr(event.start,7,2)+"." + substr(event.start,5,2)+ "." +substr(event.start,1,4) + " " + substr(event.start,10,2) + ":" + substr(event.start,12,2)
+	termin = cdow(convert_type(termin,"D"),.t.)+", " + termin 
+	summary = "Termin "+ event.location +": " + termin + " - " + substr(event.summary,at("-",event.summary,2)+1)
+	
+	tbl = table.open("info",FILE_RW_SHARED)
+	on error goto error_tbl_uv
+	tbl.enter_begin(.t.)
+	tbl.v_kom = cquery.kom_id
+	tbl.v_vg = cquery.vg_id
+	tbl.v_vg2 = cquery.vg_id
+	tbl.datum = date()
+	tbl.an = an
+	tbl.von = von
+	tbl.news = summary + if(event.bereitschaft," - bitte Bereitschaft einplanen","")
+	tbl.enter_end(commit_flag)
+	tbl.close()
+
+	return commit_flag
+	
+error_tbl_uv:
+	msgbox("Fehler","Memo an UV konnte nicht erstellt werden.",UI_ATTENTION_SYMBOL+UI_OK)
+	commit_flag = .f.
+	resume next
+	
+end function
+
+'******************************************************************************
+
+function event_add_record as l ()
+	'Fügt den DS in event auf MariaDB an, wenn diesen noch nicht besteht,
+	'sonst atkualisiere
+	
+	dim global cquery as cdk::cquery
+	dim global vuser as c
+
+	dim sql as c
+	dim cal_id as n
+	dim tmp_cal_id as c
+	
+	'Parameter
+	cal_id = convert_type(word(event.ETag,1,":"),"N")
+
+
+	
+	'Prüfen, obe ein ds in event besteht
+	sql = "SELECT id FROM event WHERE cal_id = " + cal_id
+	
+	if .not. self.cn_ma.execute(sql) then
+	    send_error("cdk::ics.event_add_record() " + self.cn_ma.CallResult)
+	    return .f.
+	end if
+
+	'Noch kein DS in event, dann anlegen, hier als Standard
+	if event.ma_id = "" then
+		'Termin Vorgang
+		sql = "INSERT INTO event SET v_vg = " + cquery.vg_id + ", v_kom = " + cquery.kom_id + ", v_oo = " + cquery.oo_id + ", cal_id = " + cal_id + ", ETag = '" + event.ETag + "', uuid = '" + event.uid + "', n_edit = '" + vuser + "', caldav_name = '" + event.caldav_name + "'"
+	else
+		'Termin Mitarbeiter
+		sql = "INSERT INTO event SET v_az_e = '" + event.az_e + "', cal_id = " + cal_id + ", ETag = '" + event.ETag + "', uuid = '" + event.uid + "', n_edit = '" + vuser + "', caldav_name = '" + event.caldav_name + "'"
+	end if
+		
+	'Falls es doch einen ds in event, dann hier update Statement definieren
+	if self.cn_ma.ResultSet.NextRow() = .t. then
+		if event.ma_id = "" then
+			'Termin Vorgang
+			sql = "UPDATE event SET v_vg = " + cquery.vg_id + ", v_kom = " + cquery.kom_id + ", v_oo = " + cquery.oo_id + ", ETag = '" + event.ETag + "', uuid = '" + event.uid + "', n_edit = '" + vuser + "', caldav_name = '" + event.caldav_name + "' WHERE cal_id = " + cal_id
+		else
+			'Termin Mitarbeiter
+			sql = "UPDATE event SET v_az_e = '" + event.az_e + "', ETag = '" + event.ETag + "', uuid = '" + event.uid + "', n_edit = '" + vuser + "', caldav_name = '" + event.caldav_name + "' WHERE cal_id = " + cal_id
+		end if
+	end if
+	
+	'Execute SQL
+	if .not. self.cn_ma.execute(sql) then
+	    send_error("cdk::ics.event_add_record() " + self.cn_ma.CallResult)
+	    return .f.
+	end if
+	
+	'weitere Vorgänge mit dem gleichem Termin
+	if event.vg_ids <> "" then
+		dim vg_ids as c
+		dim komid as n
+		dim ooid as n
+		vg_ids = comma_to_crlf(event.vg_ids)
+		for each vgid in vg_ids
+			komid = lookupn("F",convert_type(vgid.value,"N"),"v_kom","vg","id")
+			ooid = lookupn("F",convert_type(vgid.value,"N"),"v_oo","vg","id")
+			if kom_id <= 0 then
+				msgbox("Fehler","Für Vorgang " + vgid.value + " kommte keine Kommissions ID ermittelt werden.",UI_OK)
+			else
+				sql = "INSERT INTO event SET v_vg = " + vgid.value + ", v_kom = " + komid + ", v_oo = " + ooid + ", cal_id = " + cal_id + ", ETag = '" + event.ETag + "', uuid = '" + event.uid + "', n_edit = '" + vuser + "', caldav_name = '" + event.caldav_name + "'"
+				if .not. self.cn_ma.execute(sql) then
+				    send_error("cdk::ics.event_add_record() " + self.cn_ma.CallResult)
+				    return .f.
+				end if		
+			end if
+		next
+
+	end if
+
+	delete sql
+	delete cal_id
+	
+	return .t.
+end function	
+
+'******************************************************************************
+
+function vg_update as l ()
+	'Schreibt die Termin Daten in die VG Tabelle für Level 1 und Infospalte
+'	Beratung Neuversorgung
+'	Beratung Anpassung
+'	Beratung Instandsetzung
+'	Beratung Rollikontrolli
+	'd_ber
+	'n_b
+	'o_ber
+'	Sitzprobe
+	'd_sp
+'	Zweite Sitzprobe
+	'd_sp2
+	'n_b_sp
+	'o_sp
+'	Auslieferung
+	'd_aus
+	'o_aus
+	'n_b_aus
+'	Not-Reparatur
+	'wie Beratung
+	dim tbl as p
+	dim qry as p
+	dim global cquery as cdk::cquery
+	dim ort as c
+	dim datum as d
+	dim n_b as c
+	
+	dim confirm_flag as l = .t.
+	select
+		case event.location = "Dortmund"
+			ort = "DO"
+		case event.location = "Köln"
+			ort = "K"
+		case event.location = "Hamburg"
+			ort = "HH"
+		case else
+			ort = event.location
+	end select
+	datum = ctod(substr(event.start,7,2)+"." + substr(event.start,5,2)+ "." +substr(event.start,1,4))
+	
+	tbl = table.open("vg",FILE_RW_SHARED)
+	qry = tbl.query_create("","id=" + cquery.vg_id)
+	if qry.records_get() <> 1 then
+		tbl.close()
+		send_error("cdk::ics.vg_update() " + "VG ID nicht gefunden oder nicht eindeutig: " + cquery.vg_id)
+		return .f.
+	end if
+	
+	'Berater ist immer der erst genannte
+	n_b = word(event.attendees,1,",")
+	
+	tbl.change_begin(.t.)
+	on error goto error_tbl_vg_update
+	if left(event.termin_art,8) = "Beratung" then
+		tbl.d_ber = datum
+		tbl.n_b = n_b
+		tbl.o_ber = ort
+	else if event.termin_art = "Sitzprobe" then
+		tbl.d_sp = datum
+		tbl.n_b_sp = n_b
+		tbl.o_sp = ort
+	else if event.termin_art = "Zweite Sitzprobe" then
+		tbl.d_sp2 = datum
+		tbl.n_b_sp = n_b
+		tbl.o_sp = ort
+	else if event.termin_art = "Auslieferung" then
+		tbl.d_aus = datum
+		tbl.n_b_aus = n_b
+		tbl.o_aus = ort
+	else
+		ui_msg_box("Kein Standard","Dieser Termin scheint keinen Standard zu entsprechen, bitte manuell auf Level 1 eintragen.",UI_INFORMATION_SYMBOL+UI_OK)
+	end if
+	tbl.change_end(confirm_flag)	
+	on error goto 0
+	
+	return .t.
+error_tbl_vg_update:
+	confirm_flag = .f.
+	ui_msg_box("Fehler","Die Daten konnten nicht auf Level 1 übernommen werden.",UI_ATTENTION_SYMBOL+UI_OK)
+	resume next
+end function
+
+'******************************************************************************
+
+function event_check as c (i_kom as l = .f., vg_id_temrin as n = 0)
+	'Überprüft, ob die Tabelle a5_haupt->event einen Eintrag hat, der zurvor mit der Funktion event_add_record erstellt wurde.
+	'Rückgabe in string = 
+	'4953:0:1602247975
+	'4954:0:1602248114
+	' nur eine Zeile oder ""
+	
+	dim global cquery as cdk::cquery
+
+	dim rs as sql::ResultSet
+
+	dim sql as c
+	event_check = ""
+
+	if cn_ma.IsOpen = .f. then
+		send_error("cdk::ics.event_check() - keine Verbindung zu Magnificat ")
+		return
+	end if
+	
+	if i_kom then
+		sql = "SELECT ETag FROM event WHERE v_kom = " + cquery.kom_id
+	else
+		sql = "SELECT ETag FROM event WHERE v_vg = " + cquery.vg_id
+	end if
+	if vg_id_temrin > 0 then
+		sql = "SELECT ETag FROM event WHERE v_vg = " + vg_id_temrin
+	end if
+	if vg_id_temrin < 0 .and. i_kom = .f. then
+		return
+	end if
+	'Execute SQL
+	if .not. self.cn_ma.execute(sql) then
+	    send_error("cdk::ics.event_check() Query Fehler " + self.cn_ma.CallResult.text)
+	    return
+	end if
+
+	rs = self.cn_ma.ResultSet
+	if rs.NextRow() then
+		event_check = rs.ToString()
+	end if
+	
+	delete rs
+	delete sql
+	
+	
+end function
+
+'******************************************************************************
+
+function egw_cal_get as c ( ids as c )
+	'Holt die Angaben aus egw_cal tabelle, 
+	'Parameter ID, 
+	'Rückgabe string als Terminliste
+	'Rückgabe "ERROR...", falls keine Verbindung zum EGroupware
+	'Keine Fehlerbehandlung
+	
+	dim global vuser as c		'Ich sehe auch die cal_id
+	dim rs as sql::ResultSet	'Resultset für das Ergebenis
+	
+	dim sql as c	
+	dim terminlst as c			'Rückgabe formatiert
+	dim idliste as c			'ids der egw_cal
+
+	dim start as t				'Start des Termins
+	dim ende as t				'Ende des Termins
+	dim st as c					'Stunde im Termintext in Terminliste
+	
+	dim x as n					'inter temporäre Unix Time Variable aus dem Resultset
+	
+	if self.cn_ws.isOpen = .f. then
+		egw_cal_get = "ERROR|Keine Verbindung zum Webserver"
+		send_error(egw_cal_get)
+		return	
+	end if
+	
+	'Vorher schon geprüft, aber sicherhaltshalber ncoh einmal prüfen
+	if ids = "" then
+		egw_cal_get = ""
+		return
+	end if
+	for each id in ids
+		idliste = idliste + word(id.value,1,":")+","
+	next
+	idliste = rtrim(idliste,",")
+		
+	sql = "SELECT cal_title, range_start, range_end, cal_modified, cal_location, cal_id FROM egw_cal WHERE cal_id IN (" + idliste + ") AND cal_deleted IS NULL ORDER BY range_start DESC"
+	
+	'Execute SQL
+	if .not. self.cn_ws.execute(sql) then
+	    ui_msg_box("Error", self.cn_ws.CallResult.text)
+	    return "ERROR EGroupware"
+	end if
+	
+	rs = self.cn_ws.ResultSet
+	
+
+		
+	while rs.NextRow()
+		x = rs.Data("range_start")
+		start = int_to_dt(x,310)
+		'Wenn Sommerzeit, dann eine Stunde vorstellen
+		if mesz(convert_type(start,"C")) = "MESZ" then
+			x = x + 3600
+			start = int_to_dt(x,310)
+		end if
+		
+		x = rs.Data("range_end")
+		ende = int_to_dt(x,310)
+		if mesz(convert_type(ende,"C")) = "MESZ" then
+			x = x + 3600
+			ende = int_to_dt(x,310)
+		end if
+		
+		st = "" + time("dd.MM.yyy 0h:0m",start) + "-" + time("0h:0m",ende)
+		
+		if vuser = "Cornelius" then	
+			terminlst = terminlst + st + "|" + convert_utf8_to_acp(rs.Data("cal_title")) + " ID-Cal " + rs.Data("cal_id") + crlf()
+		else
+			terminlst = terminlst + st + "|" + convert_utf8_to_acp(rs.Data("cal_title")) + crlf()
+		end if
+		
+	end while
+	delete sql
+	delete idliste
+	delete start
+	delete ende
+	delete st
+	delete x
+	return terminlst
+end function
+
+'******************************************************************************
+
+FUNCTION int_to_dt AS c (t1 AS N, tz_id as n = 310)
+	'wandelt aus eGroupware den Interger in String
+	'FROM_UNIXTIME() SQL
+	'86400 = 60*60*24
+	't1 sind die Sekunden seit dem 1.1.1970
+	'tz_id 310 = Europa/Paris
+	'Rückgabe als String, nicht dt, da meist string benötigt wird
+	
+	
+	dim t2 as n = t1/86400
+	'egw_cal->tz_id = 310 Europa/Paris
+	dim gmt_diff as n = 1
+	dim uhrzeit as c
+	dim minuten as n
+	dim stunden as n
+
+	minuten = round((((t2-floor(t2))*24 + 1) - floor((t2-floor(t2))*24 + 1))*60,0)
+	if minuten = 60 then
+		minuten = 0
+		stunden = floor((t2-floor(t2))*24 + 1) + 1
+		stunden = if(stunden=24,0,stunden)
+	else
+		stunden = floor((t2-floor(t2))*24 + 1)	
+	end if
+	
+	
+	uhrzeit = "" + padl(convert_type(stunden,"C"),2,"0") + ":" + padl(convert_type(minuten,"C"),2,"0")
+
+	int_to_dt = "" + ({01.01.1970} + floor(t2)) + " " + uhrzeit
+	
+	delete t2
+	delete gmt_diff
+	delete uhrzeit
+END FUNCTION
+
+'******************************************************************************
+
+FUNCTION dt_to_int AS N (t1 AS c )
+	'wandelt das Time Format in int für egroupeware
+	'FROM_UNIXTIME() SQL
+	't1 im format dd.mm.yyyy hh:mm
+	
+	dim tage as n
+	dim datum as d
+	dim uhrzeit as c
+	dim stunden as n
+	dim minuten as n
+	dim gmt_diff as n = 1
+	
+	datum = convert_type(left(t1,10),"D")
+	
+	tage = datum - {01.01.1970}
+	egw_dt_to_int = tage * 86400
+	
+	uhrzeit = right(t1,5)
+
+	stunden = convert_type(left(uhrzeit,2),"N")-gmt_diff
+	stunden = stunden * 3600
+
+	minuten = convert_type(right(uhrzeit,2),"N")
+	minuten = minuten * 60
+
+	dt_to_int = egw_dt_to_int + stunden + minuten
+
+	delete tage
+	delete datum
+	delete uhrzeit
+	delete stunden
+	delete minuten
+	delete gmt_diff	
+END FUNCTION
+
+
+'******************************************************************************
+
+function egw_event_dialog as l (vg_id as n, kom_id as n = 0)
+	'Zeigt die Termine des Vorgang / der Kommission an, als modeless Dialog
+	
+	dim tmp_kom_id as n
+	dim ics as cdk::ics
+	dim ids as c
+	dim shared tlst as c = ""
+	dim shared data as c = ""
+	dim vg_id as n
+	dim dlgTitle as c = "EGroupware"
+	dim xDlgHeadere as p
+	
+	tmp_kom_id = lookupn("F",vg_id,"v_kom","vg","id")
+	if vg_id <= 0 .or. tmp_kom_id <= 0 then
+		return .f.
+	end if
+
+	fmt.alternating_bands = .T.
+	fmt.even_row_color = "Blue White"
+	fmt.even_selected_color = "Dark Blue"
+	fmt.font = "Arial,10"
+	fmt.font_color_selected = "White"
+	fmt.font_color_unselected = "Black"
+	fmt.group_size = 1
+	fmt.lastbutton = "OK"
+	fmt.number_rows = .F.
+	fmt.odd_row_color = "White"
+	fmt.odd_selected_color = "Dark Blue"
+	fmt.tab_stops = "4cm,10cm"
+	
+	'Wenn Kommissions ID angegeben, dann event_check(.t.) checkt Kommissiontermine
+	if kom_id > 0 then
+		ids = ics.event_check(.t.)
+	else
+		'ansonsten event_check auf Vorgangsbasis
+		ids = ics.event_check()
+	end if
+	
+	if ids="" then
+		tlst = ""
+	else
+		tlst = ics.egw_cal_get(ids)
+		data =a5_owner_draw_list_fmt(tlst, fmt)	
+	end if
+'xDialog Header einfügen
+xDlgHeader.HeadingText = "Termine" 
+xDlgHeader.Image = "egw_kl"
+xDlgHeader.BodyText = lookupc("F",tmp_kom_id,"n_alias","kom","id")
+	
+	'IMPORTANT: Do not change the dialog title.
+	ui_modeless_dlg_box(dlgTitle,<<%dlg%
+{Background=<Transparent>}
+{stretch=width}
+{XdialogTitleSection=45,4xDlgHeader};
+[%O={@@}%.130,16^#data!rc*];
+<OK!OK><Kommission!kom>
+%dlg%,<<%code%
+	
+
+	if a_dlg_button = "OK" then
+		ui_modeless_dlg_close(dlgTitle)
+	end if
+	if a_dlg_button = "kom" then
+		a_dlg_button = ""
+			ids = ics.event_check(.t.)
+		if ids="" then
+			tlst = ""
+		else
+			tlst = ics.egw_cal_get(ids)
+			data =a5_owner_draw_list_fmt(tlst, fmt)	
+		end if
+	end if
+	ui_modeless_dlg_refresh(dlgTitle)
+	%code%)
+
+end function
+
+'******************************************************************************
+
+function constraints_event as v()
+	'Prüfungen der event Tabelle
+	dim global vuser as c
+	dim sql as c
+	dim rs as sql::ResultSet
+	dim reText as c
+	
+	'event.v_az_e muss eindeutig sein, wenn v_az_e > 0	
+	sql = <<%str%
+SELECT id, if(v_az_e > 0,COUNT(v_az_e),0) as x 
+FROM event 
+GROUP BY v_az_e 
+HAVING x > 1;
+%str%
+	if cn_ma.Execute(sql) = .f. then
+		send_error( "cdk::ics.constraints_event() : Fehler execute " + sql )
+		record_add("maintenance","titel=ERROR cdk::ics.constraints_event")
+		return
+	end if
+	rs = cn_ma.ResultSet
+	if rs.NextRow() then
+		reText = "Constraints ERROR: Doppelte gefunden event.v_az_e nicht eindeutig"
+	else
+		reText = "Constraints OK: event->v_az_e eindeutig"
+	end if
+	
+	record_add("maintenance","titel=" + reText )
+	
+	'wenn event.v_az_e > 0 muss ein DS in az_e existieren
+	sql = "select v_az_e from event WHERE v_az_e > 0 EXCEPT select id FROM az_e"
+	if cn_ma.Execute(sql) = .f. then
+		send_error( "cdk::ics.constraints_event() : Fehler execute " + sql )
+		record_add("maintenance","titel=ERROR cdk::ics.constraints_event")		
+		return
+	end if
+	rs = cn_ma.ResultSet
+	if rs.NextRow() then
+		dim rs_str as c
+		rs_str = rs.ToString()
+		reText = "Constraints ERROR: " + w_count(rs_str,crlf()) + " Datensätze in event gefunden, die keine Verbindung zu az_e haben." 
+		
+	else
+		reText = "Constraints OK: event.v_az_e korrespondiert mit az_e.id"
+	end if
+	
+	record_add("maintenance","titel=" + reText  )
+	
+end function
+
+function getBereitschaft as n ( datum as d )
+	'Diese Funktion sucht alle Bereitschaftsgtermine zum angegebenen Datum heraus und gibt deren Anzahl aus.
+	'Parameter: Datum as d
+	'Rückgabe: -1 = ERROR, 0 oder > 0 Anzahl der Bereitschaftstermine
+	
+	'siehe eine Funktion weiter getBereitschaftex, mit Uhrzeitangabe, neu
+	
+	dim args as sql::Arguments
+	dim rs as sql::ResultSet
+	dim sql as c 
+	dim start as c
+	dim ende as c
+
+sql = <<%str%
+SELECT count(*)
+FROM egw_cal 
+WHERE range_start BETWEEN unix_timestamp(:start) AND unix_timestamp(:ende) AND cal_category LIKE '%138%';
+%str%
+
+	start = date_format(datum,"yyyy-MM-dd") + " 00:00:00"
+	ende = date_format(datum,"yyyy-MM-dd") + " 23:59:00"
+	args.Add("start",start)
+	args.Add("ende",ende)
+	'Execute SQL
+	if .not. cn_ws.execute(sql,args) then
+	    send_error(cn.CallResult.text)
+	    return -1
+	    'end
+	end if
+	rs = cn_ws.ResultSet
+	'showvar(rs.data(1) )
+	return rs.data(1)
+end function
+
+FUNCTION getBereitschaft_ex AS C (datum AS D )
+	'Diese Funktion sucht alle Bereitschaftsgtermine zum angegebenen Datum heraus und gibt deren Anzahl aus.
+	'Test für den Ersatz in ics.getBereitschaft()
+	'Gebe die einzelnen Termine mit Uhrzeit aus
+	'Parameter: Datum as d
+	'Rückgabe: "ERROR..." oder Satz der Bereitschaftstermine
+	
+	dim args as sql::Arguments
+	dim rs as sql::ResultSet
+	dim sql as c 
+	dim start as c
+	dim ende as c
+	dim btermine as c
+	dim termin as c
+	dim x as n
+sql = <<%str%
+SELECT range_start as terminstart 
+FROM egw_cal 
+WHERE range_start BETWEEN unix_timestamp(:start) AND unix_timestamp(:ende) AND cal_category LIKE '%138%';
+%str%
+
+	start = date_format(datum,"yyyy-MM-dd") + " 00:00:00"
+	ende = date_format(datum,"yyyy-MM-dd") + " 23:59:00"
+	args.Add("start",start)
+	args.Add("ende",ende)
+	'Execute SQL
+	if .not. cn_ws.execute(sql,args) then
+	    'send_error(cn_ws.CallResult.text)
+	    return "ERROR " + cn_ws.CallResult
+	    'end
+	end if
+	rs = cn_ws.ResultSet
+	
+	while rs.nextrow()
+		'trace.WriteLn("" + rs.Data("terminstart"))
+		x = rs.Data("terminstart")
+		termin = self.int_to_dt(x,310)
+		'Wenn Sommerzeit, dann eine Stunde vorstellen
+		if mesz(convert_type(start,"C")) = "MESZ" then
+			x = x + 3600
+			termin = self.int_to_dt(x,310)
+		end if
+		btermine = btermine + right(termin,5) + crlf()
+	end while
+		
+	'Hinweis Text für die Bereitschaft
+	btermine = sortsubstr(btermine,crlf())
+
+	dim termin_count as n
+	termin_count = *count(btermine)
+	select
+		case termin_count = 0
+			btermine = "Keine Bereitschaftstermine"
+		case termin_count = 1
+			btermine = termin_count + " Bereitschaftstermin: " + crlf_to_comma(btermine)
+		case else
+			btermine = "{C=red}" + termin_count + " Bereitschaftstermine: " + crlf_to_comma(btermine)		
+	end select
+	
+	return btermine
+END FUNCTION
+
+Function getBereitschaftMitarbeiter as c ( datum as d )
+	'Prüft wie viele Mitarbeiter an diesem Tag Bereitschaftsdienst haben, die nicht Krank oder Urlaub haben
+	'Paramter: datum
+	'Rückgabe: crlf Liste der Monteure, keine Fehlerbehandlung
+	
+	dim sql as c = "select ma_sql.n FROM az_e LEFT JOIN ma_sql ON az_e.v_ma_id = ma_sql.id  where datum = :datum AND bereitschaft = 1 AND urlaub = 0 AND krank = 0;"
+	dim args as sql::Arguments
+	dim rs as sql::ResultSet
+	dim mListe as c
+	dim mCount as n
+	getBereitschaftMitarbeiter = ""
+	args.Add("datum",datum)
+	cn_ma.Execute(sql, args)
+	rs = cn_ma.ResultSet
+	if rs.nextrow() then
+		mListe = rs.tostring()
+		mCount = *count(mListe)
+		mCount = mCount * 2
+		mListe = strtran(crlf_to_comma(mListe),",",", ") + " - also " + mCount + " mögliche Bereitschaftstermine"
+		getBereitschaftMitarbeiter = mListe
+	else
+		mListe = "Keine Bereitschaftstermine möglich"
+	end if
+	
+end function
+
+
+FUNCTION mesz AS C (datum AS C )
+	'prüft ob das datum innerhalb der Sommerzeit liegt,
+	'MESZ deffiniert nach letzter Sonntag im März bzw. Oktober
+	'Parameter Datum, könnte auch mit Uhrzeit sein
+	'Return "ERROR:..." für Fehlermeldung
+	'Return "MESZ" für Sommerzeit
+	'Return "MEZ" für Winterzeit
+	
+	'Diese Funktion auch als normale Funktion noch vorhanden, kann bald gelöscht werden 01/06/2021
+	
+	if datum = "" then
+		return "ERROR: Paramter Datum fehlt"
+	end if
+	
+	dim checkd as d
+	checkd = convert_type(datum,"D")
+	
+	if checkd < {01.01.1970} then
+		return "ERROR: Datum kleiner 1.1.1970"
+	end if
+	if checkd > {31.12.2099} then
+		return "ERROR: Datum größer als 31.12.2099"
+	end if
+	
+	'Zeitumstellungstermine für das Jahr
+	dim jahr as n
+	dim z_to_sz as d
+	dim sz_to_z as d
+	
+	jahr = year(checkd)
+	z_to_sz = convert_type("31.3."+jahr,"D")
+	sz_to_z = convert_type("31.10."+jahr,"D")
+	
+	'Winterzeit auf Sommerzeit
+	while dow(z_to_sz) > 1
+		z_to_sz = z_to_sz - 1
+	end while
+
+	'Sommerzeit auf Winterzeit
+	while dow(sz_to_z) > 1
+		sz_to_z = sz_to_z - 1
+	end while
+
+	if checkd >= z_to_sz .and. checkd <= sz_to_z then
+		return "MESZ"
+	else
+		return "MEZ"
+	end if
+	
+END FUNCTION
+
+function summaryBaIcons as c ( attendees )
+	'Erstellt html tag für die Berater Icon, welches in event.summary eingefügt werden
+	'gehtl leider nur von Hand, ansonsten wird es decodiert und html ist nicht erlaubt
+	dim ma_id as n
+	dim span as c = ""
+	attendees = comma_to_crlf(attendees)
+	for each att in attendees
+		ma_id = sql_get_values(cn_ma,"ma_sql","n='" + alltrim(att.value) + "'","id" )
+		if ma_id > 0 then
+			span = span + "<span><img src=\"../planer/picture_ma/" + ma_id + ".png\" style=\"height:14px\" ></span>"+ crlf()
+		end if	
+	next
+	
+	return span
+end function
+
+
+function getFertigungsHinweise as c ( datum as d )
+	'prüft ob in EGroupware Termine zu Kategorie Fertigung drin stehen, die Termin müssen starten zwische 0:00 und 22:00 (Sommerzeit 1:00 und 23:00)
+	'Paramter: Datum
+	'Rückgabe: Hinweis:NameOwnerKalender, "Hinweise von der Werkstatt:pepe" oder eben ""
+	'fHinweiseOnce prüft, ob der Hinweis schon einmal ausgegeben wurden, je Hinweis nur eine Ausgabe
+	'Keine Fehlerbehandlung
+	
+	dim sql as c
+	dim cal_category as c = "38"		'38 ist Kategorie "Fertigung"
+	dim start as n
+	dim ende as n
+	dim args as sql::Arguments
+	dim hinweise as c
+	args.Add("cal_category","38")
+	'Ganztagstermine fangen in der Regel zwische 0:00 und 1:00 Uhr an, SMEZ 1:00 sonst eben 0:00
+	start = self.dt_to_int(""+datum+" 00:00:00" )
+	'ca. 22:00 Uhr, sollte reichen
+	ende = start + 79200
+	args.Add("start",start)
+	args.Add("ende",ende)
+	sql = <<%str%
+SELECT egw_cal.cal_title, egw_accounts.account_lid FROM egw_cal 
+LEFT JOIN egw_accounts ON egw_cal.cal_owner = egw_accounts.account_id 
+WHERE (range_start BETWEEN :start AND :ende) AND find_in_set(:cal_category,cal_category);
+%str%
+	'Execute SQL
+	'return sql
+	if .not. cn_ws.execute(sql,args) then
+	    ui_msg_box("Error", cn.CallResult.text)
+	    return ""
+	end if
+	hinweise = cn_ws.ResultSet.tostring(-1,-1,.t.,":" )
+	if hinweise = fHinweiseOnce then
+		return ""
+	else
+		fHinweiseOnce = hinweise
+		return hinweise
+	end if 
+	
+end function
+end class
+	
