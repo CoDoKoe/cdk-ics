@@ -5,6 +5,7 @@
 
 
 'siehe localhost/planer/ics_create.php paralle Entwicklung
+'<<passwort>>
 
 'Versuch, den Raum als Attendee hinzu zu nehmen 15/09/2021
 'Funktioniert, müsste noch Kategorie hinzu gebucht werden, "Raum1" usw. und für den Termindialog müsste die Raumbelegung ersichtlich sein, nicht ganz einfach
@@ -385,7 +386,7 @@ function ics_put as l ( body as c )
 	dim xhr.header as c = <<%str%
 Content-Type: text/calendar; charset=utf-8; component=VEVENT
 If-None-Match: *
-Authorization: Basic Y29ybmVsaXVzOmNvZG8zY29t
+Authorization: Basic <<passwort>>
 Accept: text/html
 %str%
 	'Squenz > 0 bedeutet, dass wir schon einen Termin angelegt hatten, dann Match ändern
@@ -395,7 +396,7 @@ Accept: text/html
 		xhr.header = <<%str%
 Content-Type: text/calendar; charset=utf-8; component=VEVENT
 If-None-Match: <uid>
-Authorization: Basic Y29ybmVsaXVzOmNvZG8zY29t
+Authorization: Basic <<passwort>>
 Accept: text/html
 %str%
 	xhr.header = strtran(xhr.header,"<uid>",event.uid )
@@ -465,7 +466,7 @@ FUNCTION ics_get AS C (cal_id as n )
 	
 	dim xhr.header as c = <<%str%
 Content-Type: text/calendar; charset=utf-8; component=VEVENT
-Authorization: Basic Y29ybmVsaXVzOmNvZG8zY29t
+Authorization: Basic <<passwort>>
 Accept: text/json
 %str%
 
@@ -501,7 +502,7 @@ function ics_delete as l ( )
 	
 	dim xhr.header as c
 	xhr.header = <<%str%
-Authorization: Basic Y29ybmVsaXVzOmNvZG8zY29t
+Authorization: Basic <<passwort>>
 Accept: text/html
 %str%
 	xhr.page = strtran(xhr.page,"<verzeichnis>",event.verzeichnis)
